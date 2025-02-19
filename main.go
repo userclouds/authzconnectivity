@@ -36,8 +36,17 @@ func runAuthZ() {
 	if err != nil {
 		log.Fatalf("Error creating authz client: %s", err)
 	}
+
+	for {
+		authObjects(ctx, client)
+		authZEdges(ctx, client)
+	}
+}
+
+func authZEdges(ctx context.Context, client *authz.Client) {
 	edges := enumerateEdges(ctx, client)
 	for i, edge := range edges {
+
 		_, err := client.GetObject(ctx, edge.SourceObjectID)
 		if err != nil {
 			log.Fatalf("Error getting source object for edge %d: %s", i, err)
@@ -54,6 +63,16 @@ func runAuthZ() {
 	}
 }
 
+func authObjects(ctx context.Context, client *authz.Client) {
+	objects := enumerateObjects(ctx, client)
+	for i, object := range objects {
+		objType, err := client.GetObjectType(ctx, object.TypeID)
+		if err != nil {
+			log.Fatalf("Error getting object type for object %d: %s", i, err)
+		}
+		log.Printf("Got object %d: %v [type: %v]", i, object.ID, objType.TypeName)
+	}
+}
 func enumerateEdges(ctx context.Context, client *authz.Client) []authz.Edge {
 	cursor := pagination.CursorBegin
 	edges := make([]authz.Edge, 0)
@@ -71,6 +90,25 @@ func enumerateEdges(ctx context.Context, client *authz.Client) []authz.Edge {
 	}
 	log.Printf("Got %d edges", len(edges))
 	return edges
+}
+
+func enumerateObjects(ctx context.Context, client *authz.Client) []authz.Object {
+	cursor := pagination.CursorBegin
+	objects := make([]authz.Object, 0)
+	for {
+		objs, err := client.ListObjects(ctx, authz.Pagination(pagination.StartingAfter(cursor)))
+		if err != nil {
+			log.Fatalf("Error listing objects: %s", err)
+		}
+		objects = append(objects, objs.Data...)
+		if !objs.HasNext {
+			break
+		}
+		log.Printf("Got %d objects, next: %s", len(objects), objs.Next)
+		cursor = objs.Next
+	}
+	log.Printf("Got %d objects", len(objects))
+	return objects
 }
 
 func main() {
